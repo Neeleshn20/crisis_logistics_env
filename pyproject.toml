@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crisis-logistics-env"
+version = "0.1.0"
+description = "Crisis Logistics Simulation Environment"
+authors = [
+    { name = "Neelesh" }
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "requests",
+    "numpy"
+]
+
+[tool.setuptools]
+packages = ["core", "api", "tasks", "experiments"]
