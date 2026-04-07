@@ -1,117 +1,151 @@
 import requests
-import random
+import os
 
-API_URL = "http://localhost:8000"
+# =========================
+# CONFIG
+# =========================
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
-
-# -------------------------------
-# RESET ENV
-# -------------------------------
-def reset_env():
-    res = requests.post(f"{API_URL}/reset")
-    if res.status_code != 200:
-        raise Exception("Reset failed")
-    return res.json()
+TASKS = ["easy", "medium", "hard"]
+MAX_STEPS = 20
 
 
-# -------------------------------
-# STEP ENV
-# -------------------------------
+# =========================
+# LOGGING (STRICT FORMAT)
+# =========================
+def log_start(task):
+    print(f"[START] task={task} env=crisis_logistics model=rule_agent", flush=True)
+
+
+def log_step(step, action, reward, done, error=None):
+    err = error if error else "null"
+    done_str = str(done).lower()
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={err}",
+        flush=True
+    )
+
+
+def log_end(success, steps, score, rewards):
+    rewards_str = ",".join([f"{r:.2f}" for r in rewards])
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        flush=True
+    )
+
+
+# =========================
+# API HELPERS
+# =========================
+def reset_env(task):
+    try:
+        res = requests.post(f"{API_BASE_URL}/reset", json={"task": task})
+        return res.json()
+    except:
+        return None
+
+
 def step_env(action):
-    res = requests.post(f"{API_URL}/step", json=action)
-    if res.status_code != 200:
-        raise Exception("Step failed")
-    return res.json()
+    try:
+        res = requests.post(f"{API_BASE_URL}/step", json=action)
+        return res.json()
+    except:
+        return None
 
 
-# -------------------------------
-# ADAPTIVE STRATEGY (BEST)
-# -------------------------------
-def adaptive_policy(obs):
-    inventory = obs["inventory"]
-    paths = obs["paths"]
-    suppliers = obs["suppliers"]
+# =========================
+# SIMPLE INTELLIGENT POLICY
+# =========================
+def choose_action(state):
+    inventory = state["inventory"]
+    paths = state["paths"]
 
-    # 🔹 choose product with lowest inventory
+    # 👉 pick lowest inventory product
     product = min(inventory, key=inventory.get)
 
-    # 🔹 choose safest path (highest reliability)
-    best_path = max(paths.items(), key=lambda x: x[1]["reliability"])[0]
+    # 👉 choose best path (cost vs reliability tradeoff)
+    best_path = None
+    best_score = -1
 
-    # 🔹 choose best supplier (reliability weighted by cost)
-    best_supplier = max(
-        suppliers,
-        key=lambda s: s["reliability"] / (s["cost"] + 1e-6)
-    )["id"]
-
-    # 🔹 dynamic quantity
-    base_inventory = inventory[product]
-
-    if base_inventory < 30:
-        qty = 50
-    elif base_inventory < 60:
-        qty = 35
-    else:
-        qty = 20
+    for pid, p in paths.items():
+        score = p["reliability"] / (p["cost"] + 1)
+        if score > best_score:
+            best_score = score
+            best_path = int(pid)
 
     return {
         "product": product,
-        "supplier_id": best_supplier,
-        "path_id": int(best_path),
-        "quantity": int(qty),
+        "supplier_id": 0,
+        "path_id": best_path,
+        "quantity": 40,
         "expedite": False
     }
 
 
-# -------------------------------
-# MAIN LOOP
-# -------------------------------
+# =========================
+# RUN SINGLE TASK
+# =========================
+def run_task(task):
+
+    log_start(task)
+
+    rewards = []
+    steps_taken = 0
+    success = False
+
+    obs = reset_env(task)
+
+    if obs is None:
+        log_end(False, 0, 0.0, [])
+        return
+
+    state = obs["state"]
+
+    for step in range(1, MAX_STEPS + 1):
+
+        action = choose_action(state)
+
+        result = step_env(action)
+
+        if result is None:
+            log_step(step, str(action), 0.0, True, "api_error")
+            break
+
+        state = result["state"]
+        reward = float(result["reward"])
+        done = result["done"]
+
+        rewards.append(reward)
+        steps_taken = step
+
+        log_step(step, str(action), reward, done, None)
+
+        if done:
+            break
+
+    # =========================
+    # SCORE NORMALIZATION
+    # =========================
+    if len(rewards) > 0:
+        avg_reward = sum(rewards) / len(rewards)
+    else:
+        avg_reward = 0.0
+
+    # clamp score to [0,1]
+    score = max(0.0, min(1.0, avg_reward))
+
+    success = score > 0.3  # reasonable threshold
+
+    log_end(success, steps_taken, score, rewards)
+
+
+# =========================
+# MAIN
+# =========================
 def run():
-    print("[START]")
+    for task in TASKS:
+        run_task(task)
 
-    obs = reset_env()
 
-    total_reward = 0
-    step = 0
-    done = False
-
-    while not done and step < 50:
-        action = adaptive_policy(obs)
-
-        response = step_env(action)
-
-        obs = response["state"]
-        reward = response["reward"]
-        done = response["done"]
-
-        total_reward += reward
-
-        print(
-            f"[STEP] t={step} "
-            f"product={action['product']} "
-            f"qty={action['quantity']} "
-            f"reward={round(reward,3)} "
-            f"inv={obs['inventory']}"
-        )
-
-        step += 1
-        avg_reward = total_reward / step if step > 0 else 0
-
-    print(f"[END] total_reward={round(total_reward,3)} avg_reward={round(avg_reward,3)} steps={step}")
-    print(f"[END] total_reward={round(total_reward,3)} steps={step}")
-
-def log_start(task, env, model):
-    print(f"[START] task={task} env={env} model={model}", flush=True)
-
-def log_step(step, action, reward, done, error):
-    error_val = error if error else "null"
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
-
-def log_end(success, steps, score, rewards):
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
-# -------------------------------
-# ENTRY
-# -------------------------------
 if __name__ == "__main__":
     run()
