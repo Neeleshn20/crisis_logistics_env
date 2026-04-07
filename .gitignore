@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+env/
+crisis/
+Lib/
+Scripts/
+
+# OS
+.DS_Store
+Thumbs.db
