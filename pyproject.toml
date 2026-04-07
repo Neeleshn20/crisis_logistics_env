@@ -5,17 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "crisis-logistics-env"
 version = "0.1.0"
-description = "Crisis Logistics Simulation Environment"
-authors = [
-    { name = "Neelesh" }
-]
+description = "Crisis Logistics Environment"
+authors = [{ name = "Neelesh" }]
 dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic",
     "requests",
-    "numpy"
+    "numpy",
+    "openenv-core>=0.2.0"
 ]
 
-[tool.setuptools]
-packages = ["core", "api", "tasks", "experiments"]
+[project.scripts]
+server = "server.app:app"
