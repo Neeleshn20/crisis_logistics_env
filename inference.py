@@ -1,10 +1,19 @@
 import requests
 import os
+from openai import OpenAI
 
 # =========================
-# CONFIG
+# CONFIG (MANDATORY)
 # =========================
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+MODEL_NAME = os.getenv("MODEL_NAME", "rule_agent")
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+# Initialize OpenAI client (required by spec)
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN
+)
 
 TASKS = ["easy", "medium", "hard"]
 MAX_STEPS = 20
@@ -14,7 +23,7 @@ MAX_STEPS = 20
 # LOGGING (STRICT FORMAT)
 # =========================
 def log_start(task):
-    print(f"[START] task={task} env=crisis_logistics model=rule_agent", flush=True)
+    print(f"[START] task={task} env=crisis_logistics model={MODEL_NAME}", flush=True)
 
 
 def log_step(step, action, reward, done, error=None):
@@ -54,16 +63,16 @@ def step_env(action):
 
 
 # =========================
-# SIMPLE INTELLIGENT POLICY
+# POLICY (SMART RULE-BASED)
 # =========================
 def choose_action(state):
     inventory = state["inventory"]
     paths = state["paths"]
 
-    # 👉 pick lowest inventory product
+    # Choose lowest inventory product
     product = min(inventory, key=inventory.get)
 
-    # 👉 choose best path (cost vs reliability tradeoff)
+    # Choose best path (reliability vs cost)
     best_path = None
     best_score = -1
 
@@ -83,7 +92,7 @@ def choose_action(state):
 
 
 # =========================
-# RUN SINGLE TASK
+# RUN TASK
 # =========================
 def run_task(task):
 
@@ -95,7 +104,7 @@ def run_task(task):
 
     obs = reset_env(task)
 
-    if obs is None:
+    if obs is None or "state" not in obs:
         log_end(False, 0, 0.0, [])
         return
 
@@ -104,7 +113,6 @@ def run_task(task):
     for step in range(1, MAX_STEPS + 1):
 
         action = choose_action(state)
-
         result = step_env(action)
 
         if result is None:
@@ -126,15 +134,10 @@ def run_task(task):
     # =========================
     # SCORE NORMALIZATION
     # =========================
-    if len(rewards) > 0:
-        avg_reward = sum(rewards) / len(rewards)
-    else:
-        avg_reward = 0.0
+    avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
+    score = max(0.0, min(1.0, avg_reward))  # clamp
 
-    # clamp score to [0,1]
-    score = max(0.0, min(1.0, avg_reward))
-
-    success = score > 0.3  # reasonable threshold
+    success = score > 0.3
 
     log_end(success, steps_taken, score, rewards)
 
