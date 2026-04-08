@@ -1,3 +1,14 @@
+---
+title: Crisis Logistics Environment
+emoji: 🚚
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_file: api/app.py
+app_port: 8000
+pinned: false
+---
+
 # 🚚 Crisis Logistics Decision Environment
 
 A **multi-product reinforcement learning environment** simulating real-world supply chain decision-making under uncertainty, disruptions, and resource constraints.
