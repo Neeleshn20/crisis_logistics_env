@@ -9,7 +9,7 @@ app_port: 8000
 pinned: false
 ---
 
-# 🚚 Crisis Logistics Decision Environment
+# Crisis Logistics Decision Environment
 
 A **multi-product reinforcement learning environment** simulating real-world supply chain decision-making under uncertainty, disruptions, and resource constraints.
 
